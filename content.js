@@ -90,6 +90,30 @@ const SEARCH_ENGINES = [
     resultSelectors: ['#search-result li', '#searchResult li', 'li.res-list', 'li.result'],
     closestSelectors: ['#search-result li', '#searchResult li', 'li.res-list', 'li.result'],
   },
+  {
+    id: 'quark',
+    hostPatterns: [/^(www\.)?quark\.sm\.cn$/i, /(^|\.)sm\.cn$/i],
+    resultSelectors: [
+      '#results .result',
+      '#results .c-result',
+      '.results .result',
+      '.results .c-result',
+      '[class*="result-item"]',
+      '[class*="resultItem"]',
+      '[class*="result-card"]',
+      'main article',
+    ],
+    closestSelectors: [
+      '.result',
+      '.c-result',
+      '[class*="result-item"]',
+      '[class*="resultItem"]',
+      '[class*="result-card"]',
+      'article',
+      'li',
+      'section',
+    ],
+  },
 ];
 const GLOBAL_SITE_CONFIG = {
   id: 'global',
@@ -153,7 +177,7 @@ const BING_FALLBACK_HINT_SELECTOR = [
   '[data-card-index]',
 ].join(', ');
 const GLOBAL_UI_CONTAINER_SELECTOR =
-  'header, nav, footer, form, [role="navigation"], [role="search"], [role="banner"]';
+  'header, nav, footer, form, [role="navigation"], [role="banner"]';
 
 function normalizeText(value) {
   return String(value || '')
