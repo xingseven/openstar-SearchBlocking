@@ -28,8 +28,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const stats = response.stats || {};
         const results = Number.isFinite(stats.results) ? stats.results : 0;
         const blocked = Number.isFinite(stats.blocked) ? stats.blocked : 0;
+        const fallbackBlocked = Number.isFinite(stats.fallbackBlocked)
+          ? stats.fallbackBlocked
+          : 0;
         setStatus(
-          `已注入：${response.engine || '搜索页'}，已隐藏 ${blocked}/${results} 条结果。`,
+          `已注入：${response.engine || '搜索页'}，已隐藏 ${blocked}/${results} 条结果（兜底 ${fallbackBlocked}）。`,
           'ok'
         );
       } else {

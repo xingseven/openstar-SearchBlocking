@@ -44,20 +44,32 @@ const SEARCH_ENGINES = [
       '#b_context > li',
       '#b_context .b_ans',
       '#b_context .b_algo',
+      '#b_context .b_entityTP',
+      '#b_context .b_rich',
       '#b_dynRail > li',
       '#b_dynRail .b_ans',
       '#b_dynRail .b_algo',
+      '#b_dynRail .b_entityTP',
+      '#b_dynRail .b_rich',
+      '#b_pole .b_ans',
+      '#b_pole .b_algo',
+      '#b_pole .b_entityTP',
     ],
     closestSelectors: [
       'li.b_algo',
       'li.b_ans',
       '.b_algo',
       '.b_ans',
+      '.b_entityTP',
+      '.b_rich',
       '#b_context > li',
       '#b_dynRail > li',
       'li[data-bm]',
+      '[data-card]',
+      '[data-card-index]',
       '#b_results > li',
       '#b_topw li',
+      '#b_pole li',
     ],
   },
   {
@@ -87,6 +99,7 @@ let latestStats = {
   keywords: 0,
   results: 0,
   blocked: 0,
+  fallbackBlocked: 0,
   supported: false,
 };
 const ROOT_CONTAINER_IDS = new Set([
@@ -94,6 +107,8 @@ const ROOT_CONTAINER_IDS = new Set([
   'b_results',
   'b_context',
   'b_dynRail',
+  'b_topw',
+  'b_pole',
   'b_tween',
   'b_header',
   'b_footer',
@@ -102,6 +117,18 @@ const ROOT_CONTAINER_IDS = new Set([
   'rso',
   'content_left',
 ]);
+const BING_FALLBACK_ROOT_SELECTORS = ['#b_context', '#b_dynRail', '#b_topw', '#b_pole', '#b_content'];
+const BING_FALLBACK_CARD_SELECTOR = 'div, li, article, section, aside';
+const BING_FALLBACK_HINT_SELECTOR = [
+  '.b_entityTP',
+  '.b_rich',
+  '.b_ans',
+  '.b_algo',
+  '.b_card',
+  '[data-bm]',
+  '[data-card]',
+  '[data-card-index]',
+].join(', ');
 
 function normalizeText(value) {
   return String(value || '')
@@ -228,6 +255,14 @@ function isResultCandidate(element) {
   return rect.height >= 24 || rect.width >= 80 || text.length >= 12;
 }
 
+function hasCardStructure(element) {
+  const hasHeading = element.querySelector('h1, h2, h3, h4, strong, [role="heading"]');
+  const hasSource = element.querySelector('cite, [class*="source"], [class*="attribution"]');
+  const hasResultLink = element.querySelector('a[href], [data-href], [data-url]');
+  const hasListItem = element.querySelector('ul li, ol li');
+  return Boolean(hasHeading || hasSource || hasResultLink || hasListItem);
+}
+
 function dedupeResults(elements) {
   const ordered = [...new Set(elements)].sort(
     (left, right) => getElementDepth(right) - getElementDepth(left)
@@ -313,14 +348,11 @@ function genericScan(config) {
 
       const tagName = parent.tagName.toLowerCase();
       const text = normalizeText(parent.textContent);
-      const hasHeading = parent.querySelector('h1, h2, h3, h4, strong, [role="heading"]');
-      const hasSource = parent.querySelector('cite, [class*="source"], [class*="attribution"]');
-      const hasResultLink = parent.querySelector('a[href], [data-href], [data-url]');
 
       if (
         ['article', 'div', 'li'].includes(tagName) &&
         text.length >= 12 &&
-        (hasHeading || (hasSource && hasResultLink))
+        hasCardStructure(parent)
       ) {
         results.add(parent);
         break;
@@ -332,6 +364,49 @@ function genericScan(config) {
   });
 
   return dedupeResults(results);
+}
+
+function findBingFallbackCandidates(existingResults) {
+  const knownResults = new Set(existingResults);
+  const candidates = new Set();
+  const roots = BING_FALLBACK_ROOT_SELECTORS.map((selector) => document.querySelector(selector)).filter(
+    (root) => root instanceof HTMLElement
+  );
+
+  roots.forEach((root) => {
+    root.querySelectorAll(BING_FALLBACK_CARD_SELECTOR).forEach((node) => {
+      if (!(node instanceof HTMLElement)) {
+        return;
+      }
+
+      if (isRootContainer(node)) {
+        return;
+      }
+
+      const hinted = node.closest(BING_FALLBACK_HINT_SELECTOR);
+      let card = hinted instanceof HTMLElement ? hinted : node;
+      let climb = card.parentElement;
+      let depth = 0;
+
+      while (climb && depth < 6 && !isRootContainer(climb)) {
+        if (climb.matches(BING_FALLBACK_HINT_SELECTOR)) {
+          card = climb;
+        }
+        climb = climb.parentElement;
+        depth += 1;
+      }
+
+      if (
+        !knownResults.has(card) &&
+        isResultCandidate(card) &&
+        hasCardStructure(card)
+      ) {
+        candidates.add(card);
+      }
+    });
+  });
+
+  return dedupeResults(candidates);
 }
 
 function findResults(config) {
@@ -353,7 +428,7 @@ async function getKeywords() {
     .filter((item) => item.normalized);
 }
 
-function matchesKeyword(element, keywords) {
+function collectMatchPieces(element) {
   const pieces = [element.textContent || ''];
 
   element.querySelectorAll('a[href], cite').forEach((node) => {
@@ -376,7 +451,11 @@ function matchesKeyword(element, keywords) {
     }
   });
 
-  const normalized = normalizeText(pieces.join(' '));
+  return pieces;
+}
+
+function matchesKeyword(element, keywords) {
+  const normalized = normalizeText(collectMatchPieces(element).join(' '));
   const compact = toCompact(normalized);
 
   return keywords.some(
@@ -415,6 +494,7 @@ async function blockResults() {
       keywords: 0,
       results: 0,
       blocked: 0,
+      fallbackBlocked: 0,
       supported: false,
     };
     return;
@@ -429,18 +509,24 @@ async function blockResults() {
       keywords: 0,
       results: 0,
       blocked: 0,
+      fallbackBlocked: 0,
       supported: true,
     };
     return;
   }
 
-  const results = findResults(config);
+  const directResults = findResults(config);
+  const fallbackResults =
+    config.id === 'bing' ? findBingFallbackCandidates(directResults) : [];
+  const fallbackSet = new Set(fallbackResults);
+  const results = dedupeResults([...directResults, ...fallbackResults]);
   if (results.length === 0) {
     latestStats = {
       engine: config.id,
       keywords: keywords.length,
       results: 0,
       blocked: 0,
+      fallbackBlocked: 0,
       supported: true,
     };
     console.debug('[Search Blocker] no result candidates found for', config.id);
@@ -448,6 +534,7 @@ async function blockResults() {
   }
 
   let blockedCount = 0;
+  let fallbackBlockedCount = 0;
 
   results.forEach((result) => {
     const shouldBlock = matchesKeyword(result, keywords);
@@ -455,17 +542,21 @@ async function blockResults() {
 
     if (shouldBlock) {
       blockedCount += 1;
+      if (fallbackSet.has(result)) {
+        fallbackBlockedCount += 1;
+      }
     }
   });
 
   console.debug(
-    `[Search Blocker] ${config.id}: hidden ${blockedCount}/${results.length} results`
+    `[Search Blocker] ${config.id}: hidden ${blockedCount}/${results.length} results (fallback ${fallbackBlockedCount})`
   );
   latestStats = {
     engine: config.id,
     keywords: keywords.length,
     results: results.length,
     blocked: blockedCount,
+    fallbackBlocked: fallbackBlockedCount,
     supported: true,
   };
 }
