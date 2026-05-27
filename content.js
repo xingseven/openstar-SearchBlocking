@@ -41,12 +41,20 @@ const SEARCH_ENGINES = [
       '#b_topw li',
       '#b_content .b_algo',
       '#b_content .b_ans',
+      '#b_context > li',
+      '#b_context .b_ans',
+      '#b_context .b_algo',
+      '#b_dynRail > li',
+      '#b_dynRail .b_ans',
+      '#b_dynRail .b_algo',
     ],
     closestSelectors: [
       'li.b_algo',
       'li.b_ans',
       '.b_algo',
       '.b_ans',
+      '#b_context > li',
+      '#b_dynRail > li',
       'li[data-bm]',
       '#b_results > li',
       '#b_topw li',
@@ -91,6 +99,39 @@ function normalizeText(value) {
 
 function toCompact(value) {
   return normalizeText(value).replace(/[^\p{L}\p{N}\u4e00-\u9fff]+/gu, '');
+}
+
+function decodeBingRedirectUrl(urlValue) {
+  try {
+    const parsed = new URL(urlValue, window.location.href);
+    if (!/(^|\.)bing\.com$/i.test(parsed.hostname) || parsed.pathname !== '/ck/a') {
+      return parsed.href;
+    }
+
+    const encodedParam = parsed.searchParams.get('u');
+    if (!encodedParam || encodedParam.length <= 2) {
+      return parsed.href;
+    }
+
+    const encoded = encodedParam
+      .slice(2)
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
+    const padded = encoded + '='.repeat((4 - (encoded.length % 4)) % 4);
+    const decoded = atob(padded);
+    return decoded || parsed.href;
+  } catch {
+    return String(urlValue || '');
+  }
+}
+
+function toUrlMatchText(urlValue) {
+  try {
+    const parsed = new URL(urlValue, window.location.href);
+    return `${parsed.href} ${parsed.hostname}${parsed.pathname}`;
+  } catch {
+    return String(urlValue || '');
+  }
 }
 
 function ensureHiddenStyle() {
@@ -177,15 +218,19 @@ function collectBySelectors(resultSelectors, closestSelectors) {
 function genericScan(config) {
   const results = new Set();
   const closestQuery = config.closestSelectors.join(', ');
-  const links = document.querySelectorAll('a[href^="http"]');
+  const links = document.querySelectorAll('a[href], [data-href], [data-url]');
 
   links.forEach((link) => {
-    const href = link.getAttribute('href') || '';
-    if (href.includes(window.location.hostname)) {
+    const href =
+      link.getAttribute('href') ||
+      link.getAttribute('data-href') ||
+      link.getAttribute('data-url') ||
+      '';
+    if (!href) {
       return;
     }
 
-    const matched = closestQuery ? link.closest(closestQuery) : null;
+    const matched = closestQuery && link.closest ? link.closest(closestQuery) : null;
     if (matched instanceof HTMLElement) {
       results.add(matched);
       return;
@@ -194,14 +239,17 @@ function genericScan(config) {
     let parent = link.parentElement;
     let depth = 0;
 
-    while (parent && depth < 6) {
+    while (parent && depth < 10) {
       const tagName = parent.tagName.toLowerCase();
       const text = normalizeText(parent.textContent);
+      const hasHeading = parent.querySelector('h1, h2, h3, h4, strong, [role="heading"]');
+      const hasSource = parent.querySelector('cite, [class*="source"], [class*="attribution"]');
+      const hasResultLink = parent.querySelector('a[href], [data-href], [data-url]');
 
       if (
         ['article', 'div', 'li'].includes(tagName) &&
         text.length >= 12 &&
-        parent.querySelector('h2, h3, strong')
+        (hasHeading || (hasSource && hasResultLink))
       ) {
         results.add(parent);
         break;
@@ -243,7 +291,17 @@ function matchesKeyword(element, keywords) {
     }
 
     if (node instanceof HTMLAnchorElement && node.href) {
-      pieces.push(node.href);
+      const decodedHref = decodeBingRedirectUrl(node.href);
+      pieces.push(toUrlMatchText(decodedHref));
+      pieces.push(toUrlMatchText(node.href));
+    }
+  });
+
+  element.querySelectorAll('[data-url], [data-href]').forEach((node) => {
+    const dataUrl = node.getAttribute('data-url') || node.getAttribute('data-href') || '';
+    if (dataUrl) {
+      const decoded = decodeBingRedirectUrl(dataUrl);
+      pieces.push(toUrlMatchText(decoded));
     }
   });
 
