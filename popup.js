@@ -31,12 +31,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const fallbackBlocked = Number.isFinite(stats.fallbackBlocked)
           ? stats.fallbackBlocked
           : 0;
+        const engineLabel = response.engine === 'global' ? '全局模式' : response.engine || '搜索页';
         setStatus(
-          `已注入：${response.engine || '搜索页'}，已隐藏 ${blocked}/${results} 条结果（兜底 ${fallbackBlocked}）。`,
+          `已注入：${engineLabel}，已隐藏 ${blocked}/${results} 条结果（兜底 ${fallbackBlocked}）。`,
           'ok'
         );
       } else {
-        setStatus('当前页面不是受支持的搜索结果页。', 'warn');
+        setStatus('当前页面暂不支持屏蔽。', 'warn');
       }
     } catch (error) {
       setStatus('当前页未注入脚本，请刷新页面或将扩展网站访问权限设为“在所有网站上”。', 'warn');

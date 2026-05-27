@@ -91,6 +91,29 @@ const SEARCH_ENGINES = [
     closestSelectors: ['#search-result li', '#searchResult li', 'li.res-list', 'li.result'],
   },
 ];
+const GLOBAL_SITE_CONFIG = {
+  id: 'global',
+  resultSelectors: [
+    'article',
+    '[role="article"]',
+    '[class*="card"]',
+    '[class*="post"]',
+    '[class*="feed"] > *',
+    '[class*="result"] > *',
+  ],
+  closestSelectors: [
+    'article',
+    '[role="article"]',
+    '[class*="card"]',
+    '[class*="post"]',
+    '[class*="feed"] > *',
+    '[class*="result"] > *',
+    'li',
+    'section',
+  ],
+  scanLinkLimit: 1200,
+  parentDepthLimit: 7,
+};
 
 let scheduledTimer = null;
 let mutationObserver = null;
@@ -129,6 +152,8 @@ const BING_FALLBACK_HINT_SELECTOR = [
   '[data-card]',
   '[data-card-index]',
 ].join(', ');
+const GLOBAL_UI_CONTAINER_SELECTOR =
+  'header, nav, footer, form, [role="navigation"], [role="search"], [role="banner"]';
 
 function normalizeText(value) {
   return String(value || '')
@@ -208,9 +233,10 @@ function ensureHiddenStyle() {
 
 function getSiteConfig() {
   const { hostname } = window.location;
-  return SEARCH_ENGINES.find((config) =>
+  const matchedSearchEngine = SEARCH_ENGINES.find((config) =>
     config.hostPatterns.some((pattern) => pattern.test(hostname))
   );
+  return matchedSearchEngine || GLOBAL_SITE_CONFIG;
 }
 
 function getElementDepth(element) {
@@ -234,6 +260,10 @@ function isResultCandidate(element) {
     return false;
   }
 
+  if (element.closest(GLOBAL_UI_CONTAINER_SELECTOR)) {
+    return false;
+  }
+
   const text = normalizeText(element.textContent);
   if (!text) {
     return false;
@@ -249,6 +279,11 @@ function isResultCandidate(element) {
     rect.height >= viewportHeight * 0.55;
 
   if (tooLarge) {
+    return false;
+  }
+
+  const tooTall = viewportHeight > 0 && rect.height >= viewportHeight * 0.78;
+  if (tooTall) {
     return false;
   }
 
@@ -317,7 +352,12 @@ function collectBySelectors(resultSelectors, closestSelectors) {
 
 function genericScan(config) {
   const results = new Set();
-  const links = document.querySelectorAll('a[href], [data-href], [data-url]');
+  const linkLimit = Number.isFinite(config.scanLinkLimit) ? config.scanLinkLimit : 2200;
+  const parentDepthLimit = Number.isFinite(config.parentDepthLimit) ? config.parentDepthLimit : 10;
+  const links = Array.from(document.querySelectorAll('a[href], [data-href], [data-url]')).slice(
+    0,
+    linkLimit
+  );
 
   links.forEach((link) => {
     const href =
@@ -341,7 +381,7 @@ function genericScan(config) {
     let parent = link.parentElement;
     let depth = 0;
 
-    while (parent && depth < 10) {
+    while (parent && depth < parentDepthLimit) {
       if (isRootContainer(parent)) {
         break;
       }
