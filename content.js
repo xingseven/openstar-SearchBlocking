@@ -89,6 +89,19 @@ let latestStats = {
   blocked: 0,
   supported: false,
 };
+const ROOT_CONTAINER_IDS = new Set([
+  'b_content',
+  'b_results',
+  'b_context',
+  'b_dynRail',
+  'b_tween',
+  'b_header',
+  'b_footer',
+  'sb_form',
+  'search',
+  'rso',
+  'content_left',
+]);
 
 function normalizeText(value) {
   return String(value || '')
@@ -134,6 +147,27 @@ function toUrlMatchText(urlValue) {
   }
 }
 
+function isRootContainer(element) {
+  if (!(element instanceof HTMLElement)) {
+    return true;
+  }
+
+  if (element === document.body || element === document.documentElement) {
+    return true;
+  }
+
+  if (ROOT_CONTAINER_IDS.has(element.id)) {
+    return true;
+  }
+
+  const tagName = element.tagName.toLowerCase();
+  if (['html', 'body', 'main'].includes(tagName)) {
+    return true;
+  }
+
+  return false;
+}
+
 function ensureHiddenStyle() {
   if (document.getElementById(STYLE_ID)) {
     return;
@@ -169,18 +203,34 @@ function isResultCandidate(element) {
     return false;
   }
 
+  if (isRootContainer(element)) {
+    return false;
+  }
+
   const text = normalizeText(element.textContent);
   if (!text) {
     return false;
   }
 
   const rect = element.getBoundingClientRect();
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const tooLarge =
+    viewportWidth > 0 &&
+    viewportHeight > 0 &&
+    rect.width >= viewportWidth * 0.96 &&
+    rect.height >= viewportHeight * 0.55;
+
+  if (tooLarge) {
+    return false;
+  }
+
   return rect.height >= 24 || rect.width >= 80 || text.length >= 12;
 }
 
 function dedupeResults(elements) {
   const ordered = [...new Set(elements)].sort(
-    (left, right) => getElementDepth(left) - getElementDepth(right)
+    (left, right) => getElementDepth(right) - getElementDepth(left)
   );
   const results = [];
 
@@ -189,7 +239,12 @@ function dedupeResults(elements) {
       return;
     }
 
-    if (results.some((existing) => existing === element || existing.contains(element))) {
+    if (
+      results.some(
+        (existing) =>
+          existing === element || existing.contains(element) || element.contains(existing)
+      )
+    ) {
       return;
     }
 
@@ -199,13 +254,23 @@ function dedupeResults(elements) {
   return results;
 }
 
+function getClosestByPriority(element, selectors) {
+  for (const selector of selectors) {
+    const matched = element.closest(selector);
+    if (matched instanceof HTMLElement) {
+      return matched;
+    }
+  }
+
+  return element;
+}
+
 function collectBySelectors(resultSelectors, closestSelectors) {
   const results = new Set();
-  const closestQuery = closestSelectors.join(', ');
 
   resultSelectors.forEach((selector) => {
     document.querySelectorAll(selector).forEach((element) => {
-      const container = closestQuery ? element.closest(closestQuery) || element : element;
+      const container = getClosestByPriority(element, closestSelectors);
       if (container instanceof HTMLElement) {
         results.add(container);
       }
@@ -217,7 +282,6 @@ function collectBySelectors(resultSelectors, closestSelectors) {
 
 function genericScan(config) {
   const results = new Set();
-  const closestQuery = config.closestSelectors.join(', ');
   const links = document.querySelectorAll('a[href], [data-href], [data-url]');
 
   links.forEach((link) => {
@@ -230,7 +294,10 @@ function genericScan(config) {
       return;
     }
 
-    const matched = closestQuery && link.closest ? link.closest(closestQuery) : null;
+    const matched =
+      link.closest && config.closestSelectors.length > 0
+        ? getClosestByPriority(link, config.closestSelectors)
+        : null;
     if (matched instanceof HTMLElement) {
       results.add(matched);
       return;
@@ -240,6 +307,10 @@ function genericScan(config) {
     let depth = 0;
 
     while (parent && depth < 10) {
+      if (isRootContainer(parent)) {
+        break;
+      }
+
       const tagName = parent.tagName.toLowerCase();
       const text = normalizeText(parent.textContent);
       const hasHeading = parent.querySelector('h1, h2, h3, h4, strong, [role="heading"]');
