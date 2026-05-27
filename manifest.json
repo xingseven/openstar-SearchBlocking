@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "搜索屏蔽器 - Search Blocker",
+  "version": "1.0.4",
+  "description": "屏蔽搜索结果中包含指定关键词的条目，支持 Google、百度、Bing 等搜索引擎",
+  "permissions": ["storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icons/icon128.png"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end",
+      "all_frames": true
+    }
+  ]
+}

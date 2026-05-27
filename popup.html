@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>搜索屏蔽器</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --accent: #e94560;
+      --text: #eaeaea;
+      --text-dim: #888;
+      --border: #2a2a4a;
+      --radius: 8px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 320px;
+      min-height: 300px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 16px;
+    }
+    h1 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--accent);
+    }
+    .input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .input-row input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+    }
+    .input-row input:focus {
+      border-color: var(--accent);
+    }
+    .input-row input::placeholder {
+      color: var(--text-dim);
+    }
+    .btn {
+      padding: 8px 14px;
+      border: none;
+      border-radius: var(--radius);
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:active { opacity: 0.7; }
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .btn-secondary:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+    .keyword-list {
+      list-style: none;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+    .keyword-list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 10px;
+      margin-bottom: 4px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      font-size: 13px;
+    }
+    .keyword-list li .keyword-text {
+      word-break: break-all;
+      flex: 1;
+    }
+    .empty {
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 13px;
+      padding: 20px 0;
+    }
+    .footer {
+      margin-top: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .count {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+    .status {
+      margin-top: 8px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--text-dim);
+      min-height: 32px;
+    }
+    .status.warn {
+      color: #f7b267;
+    }
+    .status.ok {
+      color: #7dd3a6;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔇 搜索屏蔽器</h1>
+
+  <div class="input-row">
+    <input type="text" id="keywordInput" placeholder="输入关键词，回车添加" />
+    <button class="btn" id="addBtn">添加</button>
+  </div>
+
+  <ul class="keyword-list" id="keywordList">
+    <li class="empty">还没有屏蔽词，在上方添加</li>
+  </ul>
+
+  <div class="footer">
+    <span class="count" id="countLabel">共 0 个屏蔽词</span>
+    <button class="btn-secondary" id="clearBtn">清空全部</button>
+  </div>
+  <div class="status" id="statusLabel"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
