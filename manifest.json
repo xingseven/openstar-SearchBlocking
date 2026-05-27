@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "搜索屏蔽器 - Search Blocker",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "屏蔽搜索结果中包含指定关键词的条目，支持 Google、百度、Bing 等搜索引擎",
   "permissions": ["storage"],
   "host_permissions": ["<all_urls>"],
